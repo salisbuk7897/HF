@@ -430,36 +430,36 @@ Diagnosis_option = st.selectbox(
 )
 
 #st.write("You selected:", Diagnosis_option)
-img_path2 = "./predict"
+img_path2 = "predict"
 def prepare_pred(a, b):
     # not expecting many people to test, hence the next few lines of code have not been throughly engineered
     # Opening JSON file
-    f = open('data.json')
+    f = open(os.path.join(os.getcwd(),'data.json'))
 
     # returns JSON object as 
     # a dictionary
     data = json.load(f)
     datacopy = data.copy()
     if (len(datacopy["data"]) == 0):
-        img_new = f'{img_path2}/{1}.jpg'
+        img_new = os.path.join(os.getcwd(),f"{img_path2}", f"{1}.jpg")
         with open(img_new, 'wb') as file:
             file.write(a)
             dict_data = [img_new, b]
             datacopy["data"].append(dict_data)
             # Closing file
             f.close()
-            with open('data.json', 'w') as file1:
+            with open(os.path.join(os.getcwd(),"data.json"), 'w') as file1:
                 json.dump(datacopy, file1)
         return dict_data
     else:
-        img_new = f'{img_path2}/{len(datacopy["data"])+1}.jpg'
+        img_new = os.path.join(os.getcwd(),f"{img_path2}", f"{len(datacopy["data"])+1}.jpg")
         with open(img_new, 'wb') as file:
             file.write(a)
             dict_data = [img_new, b]
             datacopy["data"].append(dict_data)
             # Closing file
             f.close()
-            with open('data.json', 'w') as file1:
+            with open(os.path.join(os.getcwd(),"data.json"), 'w') as file1:
                 json.dump(datacopy, file1)
         return dict_data
 
@@ -501,14 +501,14 @@ def start_pred(imagedata):
     statuss = f'{"Correct" if img_rec["pred_classname"] == img_rec["real_Diagnosis"] else "Incorrect"}'
     img_rec['status'] = statuss
 
-    f = open('result.json')
+    f = open(os.path.join(os.getcwd(),'result.json'))
     # returns JSON object as 
     # a dictionary
     data = json.load(f)
     datacopy = data.copy()
     f.close()
     datacopy["result"].append(img_rec)
-    with open('result.json', 'w') as file1:
+    with open(os.path.join(os.getcwd(),'result.json'), 'w') as file1:
                 json.dump(datacopy, file1)
     #print(img_rec)
     st.text("Prediction Results")
