@@ -22,6 +22,27 @@ import streamlit as st
 # from tkinter import filedialog
 import json
 import cv2
+from pathlib import Path
+
+pathhh = 'predict'
+p = Path(os.path.join(os.getcwd(),f"{pathhh}"))
+existt = p.exists()
+
+if not existt:
+# create new single directory
+    os.mkdir(os.path.join(os.getcwd(),f"{pathhh}"))
+
+    dataa_dict = {}
+    dataa_dict["data"] = []
+    with open(os.path.join(os.getcwd(),"data.json"), 'w') as file1:
+        json.dump(dataa_dict, file1)
+
+    res_dict = {}
+    res_dict["result"] = []
+    with open(os.path.join(os.getcwd(),"result.json"), 'w') as file2:
+        json.dump(res_dict, file2)
+else:
+    print("file exist")
 
 st.header("Early Detection of Heart Failure Using ECG")
 st.write("  Heart failure is a condition arising from functional or structural abnormality of the Heart.\
