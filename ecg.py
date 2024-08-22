@@ -17,6 +17,11 @@ import json
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.optimizers import Adam
 import streamlit as st
+# from tkinter import *
+# import pandas as pd
+# from tkinter import filedialog
+import json
+import cv2
 
 st.header("Early Detection of Heart Failure Using ECG")
 st.write("  Heart failure is a condition arising from functional or structural abnormality of the Heart.\
@@ -121,17 +126,17 @@ fig = px.pie(df_result,
 st.write("The graphical representation of the classes in the dataset",fig)
 
 # Show random images
-Images = df["Directory"].values
-random_images = [np.random.choice(Images) for i in range(9)]
-fig_random = plt.figure(figsize=(20,10))
-for i in range(9):
-    plt.subplot(3,3,i+1)
-    img = plt.imread(os.path.join(random_images[i]))
-    plt.imshow(img, cmap='gray')
-    plt.axis('off')
-    plt.tight_layout()
-st.write("Displaying Random Sample Images from the dataset")
-st.pyplot(fig_random)
+# Images = df["Directory"].values
+# random_images = [np.random.choice(Images) for i in range(9)]
+# fig_random = plt.figure(figsize=(20,10))
+# for i in range(9):
+#     plt.subplot(3,3,i+1)
+#     img = plt.imread(os.path.join(random_images[i]))
+#     plt.imshow(img, cmap='gray')
+#     plt.axis('off')
+#     plt.tight_layout()
+# st.write("Displaying Random Sample Images from the dataset")
+# st.pyplot(fig_random)
 
 # Raw image details
 sample_img = df.Directory[0]
@@ -219,3 +224,346 @@ st.text("Results of data division into training test and validation")
 st.write("Total number of training images",df_train["Directory"].count())
 st.write("Total number of validation images",df_validation["Directory"].count())
 st.write("Total number of test images",df_test["Directory"].count())
+
+# Saved Model
+savedModel=load_model('ecgResnet2.h5')
+savedModel.summary(print_fn=lambda x: st.text(x))
+
+#Saved History
+savedHistory=np.load('resnet_history.npy',allow_pickle='TRUE').item()
+
+# Accuracy
+st.write("")
+st.text("Accuracy Plot")
+fig_acc = plt.gcf()
+plt.plot(savedHistory['accuracy'])
+plt.plot(savedHistory['val_accuracy'])
+plt.axis(ymin=0.4, ymax=1)
+plt.grid()
+plt.title('Model Accuracy')
+plt.ylabel('Accuracy')
+plt.xlabel('Epochs')
+plt.legend(['train', 'validation'])
+st.pyplot(fig_acc)
+
+# Loss
+st.write("")
+st.text("Loss Plot")
+fig_loss = plt.figure(figsize=(20,10))
+plt.plot(savedHistory['loss'])
+plt.plot(savedHistory['val_loss'])
+plt.axis(ymin=0.4, ymax=1)
+plt.grid()
+plt.title('Model Loss')
+plt.ylabel('Loss')
+plt.xlabel('Epochs')
+plt.legend(['train', 'validation'])
+st.pyplot(fig_loss)
+
+# AUC
+st.write("")
+st.text("AUC Plot")
+fig_auc = plt.figure(figsize=(20,10))
+plt.plot(savedHistory['AUC'])
+plt.plot(savedHistory['val_AUC'])
+plt.title('Model Loss')
+plt.ylabel('Loss')
+plt.xlabel('Epochs')
+plt.legend(['train', 'validation'])
+st.pyplot(fig_auc)
+
+# use save models to make prediction on test data
+#model_pred=savedModel.predict(test_generator)
+# Use saved model prediction on test data
+modelPred = np.load('savedModelTestPredictions.npy', allow_pickle=True).item()
+model_pred = modelPred['pred']
+
+test_labels=[]
+for i in range(294):
+    img, label = test_generator.__getitem__(i)
+    test_labels.append(list(label[0]))
+
+pred_list=[]
+for z in range(len(model_pred)):
+    pred_list.append(list(model_pred[z]))
+
+img_pred_list_z = []
+for i in range(294):
+    img_dictz = {}
+    pred_listz = pred_list[i]
+    # start here
+    max_pred =  max(pred_listz)
+    pred_index = pred_listz.index(max_pred)
+    label_listzz = test_labels[i]
+    max_label = max(label_listzz)
+    label_index = label_listzz.index(max_label)
+    img_dictz[f'ECG Test {i}'] = (int(round(max_pred)) == int(max_label) and pred_index == label_index) #correct this arrangement to ECG Test: number
+    img_dictz['status'] = f"{"Correct" if (int(round(max_pred)) == int(max_label) and pred_index == label_index) else "Incorrect"}"
+    img_dictz['pred'] = f"class {pred_index}"
+    img_dictz['class'] = f"class {label_index}"
+    img_pred_list_z.append(img_dictz)
+
+class_dctz= [] 
+for i in img_pred_list_z:
+    class_dctz.append(i['class'])
+
+class_dfz = pd.DataFrame(class_dctz, columns=['classes'])
+#class_dfz.head()
+
+class_df_resultz = pd.DataFrame(class_dfz['classes'].value_counts())
+class_df_resultz = class_df_resultz.reset_index()
+class_df_resultz.columns = ["Classes","Total"]
+#class_df_resultz.head()
+
+test_df_resultz = pd.DataFrame(df_test['Diagnosis'].value_counts())
+test_df_resultz = test_df_resultz.reset_index()
+test_df_resultz.columns = ["Diagnosis","Total"]
+#test_df_resultz.head()
+
+merged_dfz = test_df_resultz.merge(class_df_resultz, how='right')
+
+img_pred_listz2 = []
+full_namez = {'af': 'Atrial Flutter', 'afib':'Atrial Fibrillation', 'asmi':'Anteroseptal Myocardial Infarction', 'imi':'Inferior myocardial Infarction', 'sb':'Sinus Bradycardia', 'nsr':'Normal Sinus Rythm'}
+for i in img_pred_list_z:
+    Diagnosisz = f"{merged_dfz[merged_dfz['Classes']==i['class']]['Diagnosis'].item()}"
+    i['real_class'] = Diagnosisz
+    i['real_classname'] = full_namez[Diagnosisz]
+    Diagnosisz2 = f"{merged_dfz[merged_dfz['Classes']==i['pred']]['Diagnosis'].item()}"
+    i['pred_class'] = Diagnosisz2
+    i['pred_classname'] = full_namez[Diagnosisz2]
+    img_pred_listz2.append(i)
+
+rows = [] 
+for a in img_pred_listz2:
+    rows.append(list(a.values()))
+columns = list(img_pred_listz2[0].keys())
+#columns
+
+tst_result = pd.DataFrame(rows, columns= columns)
+tst_result = tst_result.drop(columns[0], axis=1)
+
+afib_res = tst_result[tst_result['real_class']=='afib']
+af_res = tst_result[tst_result['real_class']=='af']
+asmi_res = tst_result[tst_result['real_class']=='asmi']
+imi_res = tst_result[tst_result['real_class']=='imi']
+nsr_res = tst_result[tst_result['real_class']=='nsr']
+sb_res = tst_result[tst_result['real_class']=='sb']
+
+x = test_df_resultz['Diagnosis'].to_numpy()
+y = test_df_resultz['Total'].to_numpy()
+
+colours = ["Blue","green","Red","Yellow", "Purple", "cyan"]
+
+data_fig = go.Figure(data=[go.Bar(x=y,
+                                y=x, 
+                                text=y,
+                                textposition="outside",
+                                marker_color=colours,
+                                 orientation='h')])
+
+data_fig.update_layout(width=1000, height=500)
+data_fig.update_layout(title_text="Test Data")
+st.write(data_fig)
+
+
+df_res_afib = pd.DataFrame(afib_res['status'].value_counts())
+df_res_afib = df_res_afib.reset_index()
+df_res_afib.columns = ["Status","Total"]
+
+# af
+df_res_af = pd.DataFrame(af_res['status'].value_counts())
+df_res_af = df_res_af.reset_index()
+df_res_af.columns = ["Status","Total"]
+
+#asmi
+df_res_asmi = pd.DataFrame(asmi_res['status'].value_counts())
+df_res_asmi = df_res_asmi.reset_index()
+df_res_asmi.columns = ["Status","Total"]
+
+#imi
+df_res_imi = pd.DataFrame(imi_res['status'].value_counts())
+df_res_imi = df_res_imi.reset_index()
+df_res_imi.columns = ["Status","Total"]
+
+# nsr
+df_res_nsr = pd.DataFrame(nsr_res['status'].value_counts())
+df_res_nsr = df_res_nsr.reset_index()
+df_res_nsr.columns = ["Status","Total"]
+
+# sb
+df_res_sb = pd.DataFrame(sb_res['status'].value_counts())
+df_res_sb = df_res_sb.reset_index()
+df_res_sb.columns = ["Status","Total"]
+
+fig = make_subplots(
+    rows=2, cols=3, 
+    specs=[[{'type': 'domain'}, {'type': 'domain'}, {'type': 'domain'}], [{'type': 'domain'}, {'type': 'domain'}, {'type': 'domain'}]], 
+    subplot_titles=("Atrial Fibrillation Test", "Atrial Flutter Test", "Anteroseptal Myocardial Infarction","Inferior Myocardial Infarction", "Normal Sinus Rythm", "Sinus Bradycardia"))
+fig.add_trace(go.Pie(labels=df_res_afib['Status'].to_numpy(), values=df_res_afib['Total'].to_numpy()), 1, 1)
+fig.add_trace(go.Pie(labels=df_res_af['Status'].to_numpy(), values=df_res_af['Total'].to_numpy()), 1, 2)
+fig.add_trace(go.Pie(labels=df_res_asmi['Status'].to_numpy(), values=df_res_asmi['Total'].to_numpy()), 1, 3)
+fig.add_trace(go.Pie(labels=df_res_imi['Status'].to_numpy(), values=df_res_imi['Total'].to_numpy()), 2, 1)
+fig.add_trace(go.Pie(labels=df_res_nsr['Status'].to_numpy(), values=df_res_nsr['Total'].to_numpy()), 2, 2)
+fig.add_trace(go.Pie(labels=df_res_sb['Status'].to_numpy(), values=df_res_sb['Total'].to_numpy()), 2, 3)
+
+
+fig.update_layout(width=1000, height=700, title_text="Prediction Results for All 6 Classes")
+fig.update_traces(marker=dict(colors=['purple', 'aquamarine']))
+st.write(fig)
+
+uploaded_imgDir = ''
+uploaded_imgDiagnosis = ''
+st.subheader("Model Prediction Testing")
+st.text('Please Upload an ECG Image to Predict')
+## file upload for prediction
+img_byte = ''
+uploaded_file = st.file_uploader("Choose a file")
+if uploaded_file is not None:
+    # To read file as bytes:
+    bytes_data = uploaded_file.getvalue()
+    img_byte = bytes_data
+    #st.write(bytes_data)
+st.text("please select diagnosis")
+Diagnosis_option = st.selectbox(
+    "What is the diagnosis of the image you uploaded?",
+    ('Atrial Flutter', 'Atrial Fibrillation', 'Anteroseptal Myocardial Infarction', 'Inferior myocardial Infarction', 'Sinus Bradycardia', 'Normal Sinus Rythm'),
+)
+
+#st.write("You selected:", Diagnosis_option)
+img_path2 = "./predict"
+def prepare_pred(a, b):
+    # not expecting many people to test, hence the next few lines of code have not been throughly engineered
+    # Opening JSON file
+    f = open('data.json')
+
+    # returns JSON object as 
+    # a dictionary
+    data = json.load(f)
+    datacopy = data.copy()
+    if (len(datacopy["data"]) == 0):
+        img_new = f'{img_path2}/{1}.jpg'
+        with open(img_new, 'wb') as file:
+            file.write(a)
+            dict_data = [img_new, b]
+            datacopy["data"].append(dict_data)
+            # Closing file
+            f.close()
+            with open('data.json', 'w') as file1:
+                json.dump(datacopy, file1)
+        return dict_data
+    else:
+        img_new = f'{img_path2}/{len(datacopy["data"])+1}.jpg'
+        with open(img_new, 'wb') as file:
+            file.write(a)
+            dict_data = [img_new, b]
+            datacopy["data"].append(dict_data)
+            # Closing file
+            f.close()
+            with open('data.json', 'w') as file1:
+                json.dump(datacopy, file1)
+        return dict_data
+
+def start_pred(imagedata):
+    image_record = [imagedata]
+    dfp =pd.DataFrame(image_record, columns=["img","p"])
+
+    transformed_img = Image_generator.flow_from_dataframe(
+        dataframe=dfp,
+        directory= None,
+        x_col="img",
+        y_col="p",
+        class_mode = "categorical",
+        batch_size=1,
+        seed=42,
+        shuffle=False,
+        target_size=(512,920))
+
+    img, label = transformed_img.__getitem__(0) #cv2.imread(infiles[0])
+    image_resized= cv2.resize(img[0], (920,512))
+    #cv2.imshow('ECG', img[0])
+    #cv2.waitKey(0)
+    img=np.expand_dims(image_resized,axis=0)
+    #img.shape
+
+    pred_img=savedModel.predict(img)
+    #print(pred_img[0])
+    img_rec = {}
+    pred_list_img = list(pred_img[0])
+    max_pred_img =  max(pred_list_img)
+    pred_index_img = pred_list_img.index(max_pred_img)
+    img_rec['pred'] = f"class {pred_index_img}"
+    img_Diagnosis = f"{merged_dfz[merged_dfz['Classes']==img_rec['pred']]['Diagnosis'].item()}"
+    img_rec['pred_class'] = img_Diagnosis
+    img_rec['pred_classname'] = full_namez[img_Diagnosis]
+    img_rec['score'] = str(max_pred_img)
+    img_rec['img'] = imagedata[0]
+    img_rec['real_Diagnosis'] = imagedata[1]
+    statuss = f'{"Correct" if img_rec["pred_classname"] == img_rec["real_Diagnosis"] else "Incorrect"}'
+    img_rec['status'] = statuss
+
+    f = open('result.json')
+    # returns JSON object as 
+    # a dictionary
+    data = json.load(f)
+    datacopy = data.copy()
+    f.close()
+    datacopy["result"].append(img_rec)
+    with open('result.json', 'w') as file1:
+                json.dump(datacopy, file1)
+    #print(img_rec)
+    st.text("Prediction Results")
+    
+    st.dataframe(
+        pd.DataFrame({
+            "field": ["Predicted Diagnosis", "Provided Diagnosis", "Prediction Status"],
+            "values": [img_rec["pred_classname"], img_rec["real_Diagnosis"], statuss],
+        }), width=800
+    )
+    # st.write("Predicted Diagnosis: ",img_rec["pred_classname"])
+    # st.write("Provided Diagnosis: ",img_rec["real_Diagnosis"])
+    #st.write("Probability score of Diagnosis: ",img_rec["score"])
+    float_score = float("{:.1f}".format(float(img_rec["score"])*100))
+    #st.write("Prediction Status: ",img_rec["pred_classname"] == img_rec["real_Diagnosis"])
+    rct = f'{  "😄" if img_rec["pred_classname"] == img_rec["real_Diagnosis"] else '😓' }'
+    st.markdown("""
+        <style>
+            table {
+                width: 100%;
+            }
+            td {
+                text-align: center;
+            }
+            .big-font {
+                font-size:100px !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+    # st.markdown(f'<div class="container"><p class="big-font">{rct}</p><div>', unsafe_allow_html=True)
+    # st.markdown(f'<div class="container">\
+    #                 <div>\
+    #                     <div class="big-font">{float_score}%</div>\
+    #                     <div class="ui-labels">Pobability Score</div>\
+    #                 </div>\
+    #             </div>', unsafe_allow_html=True)
+    st.markdown(f'<table>\
+                    <tr>\
+                        <th> Probability Score </th>\
+                        <th> Model Status </th>\
+                    </tr>\
+                    <tr>\
+                        <td class="big-font">\
+                            {float_score}%\
+                        </td>\
+                        <td class="big-font">\
+                            {rct}\
+                        </td>\
+                    </tr>\
+                </table>', unsafe_allow_html=True)
+
+# if showPredict:
+#     if st.button("Start prediction"):
+#         start_pred()
+# else:
+if st.button("Predict"):
+    cx = prepare_pred(img_byte, Diagnosis_option)
+    start_pred(cx)
